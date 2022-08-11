@@ -1,8 +1,10 @@
-import socket
 import logging
 import pickle
+import select
+import socket
 
-BUFFER_SIZE = 65536
+
+BUFFER_SIZE = 2048
 logging.basicConfig(level=logging.INFO)
 
 def encode(obj):
@@ -32,10 +34,14 @@ class streamDecoder:
                     objBytes = self.objBuffer[:self.objSize]
                     self.objBuffer = self.objBuffer[self.objSize:]
                     obj = pickle.loads(objBytes)
+                    print(f'object {obj} received')
                     self.objsList.append(obj)
                     self.objSize = None
                 else:
                     break
+    #-------------------------------------------------------------------------
+    def thereIsObject(self):
+        return len(self.objsList) > 0
     #-------------------------------------------------------------------------
     def getObject(self):
         if len(self.objsList) > 0:
@@ -58,8 +64,7 @@ class objOverTcp:
         self.side      = side
         self.address   = address
         self.port      = port
-        self.rxObjSize = None
-        self.rxBuffer  = b''
+        self.decoder   = streamDecoder()
         self.sock      = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         if self.side == 'server':
             self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -81,12 +86,21 @@ class objOverTcp:
             self.sock.close()
     #---------------------------------------------------------------------
     def send(self, obj):
-        pklObj = pickle.dumps(obj)
-        self.conn.sendall(pklObj)
+        self.conn.sendall(encode(obj))
     #---------------------------------------------------------------------
-    def receive(self):
-        pklObj = self.conn.recv(BUFFER_SIZE)
-        print(f'len(pklObj) = {len(pklObj)}')
-        print(f'type(pklObj = {type(pklObj)}')
-        obj = pickle.loads(pklObj)
-        return obj
+    def receive(self, timeout = 0):
+        if self.decoder.thereIsObject():
+            return self.decoder.getObject()
+        while True:
+            readList  = [self.conn]
+            writeList = []
+            errorList = readList
+            readList, writeList, errorList = select.select(readList, writeList, errorList, timeout)
+            print('readList, writeList, errorList =', readList, writeList, errorList)
+            if len(readList) == 0: 
+                break
+            data = self.conn.recv(BUFFER_SIZE)
+            self.decoder.insertBytes(data)
+        if self.decoder.thereIsObject():
+            return self.decoder.getObject() 
+        return None
