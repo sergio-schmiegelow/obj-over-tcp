@@ -1,6 +1,6 @@
 import obj_over_tcp as oot
 import pytest
-MAX_SEGMENT_SIZE = 10
+MAX_SEGMENT_SIZE = 1500
 #-------------------------------------------------------------------------
 def test_object_creation():
     with pytest.raises(ValueError):
@@ -13,7 +13,7 @@ def test_object_creation():
         cnxObj = oot.objOverTcp('xyz', '0.0.0.0', 99999)
 #-------------------------------------------------------------------------        
 def test_encode_decode():
-    inList = ['12345', {'a':1, 'b':2}, {'aa':11, 'bb':22}, 12312]
+    inList = ['12345', {'a':1, 'b':2}, {'aa':11, 'bb':22}, 12312, [str(x) for x in range(100000)]]
     buffer = b''
     for el in inList:
         buffer += oot.encode(el)
