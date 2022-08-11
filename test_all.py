@@ -1,5 +1,6 @@
 import obj_over_tcp as oot
 import pytest
+MAX_SEGMENT_SIZE = 10
 #-------------------------------------------------------------------------
 def test_object_creation():
     with pytest.raises(ValueError):
@@ -12,4 +13,24 @@ def test_object_creation():
         cnxObj = oot.objOverTcp('xyz', '0.0.0.0', 99999)
 #-------------------------------------------------------------------------        
 def test_encode_decode():
-    pass 
+    inList = ['12345', {'a':1, 'b':2}, {'aa':11, 'bb':22}, 12312]
+    buffer = b''
+    for el in inList:
+        buffer += oot.encode(el)
+    sd = oot.streamDecoder()
+    while len(buffer) > 0:
+        segmentSize = min(MAX_SEGMENT_SIZE, len(buffer))
+        segment = buffer[:segmentSize]
+        buffer = buffer[segmentSize:]
+        sd.insertBytes(segment)
+    outList = []
+    while True:
+        el = sd.getObject()
+        if el is not None:
+            outList.append(el)
+        else:
+            break
+    print(outList)
+    assert(inList == outList)
+
+    

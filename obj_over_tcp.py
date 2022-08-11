@@ -4,15 +4,38 @@ import pickle
 
 BUFFER_SIZE = 65536
 logging.basicConfig(level=logging.INFO)
+
+def encode(obj):
+    objBytes = pickle.dumps(obj)
+    objSize = len(objBytes)
+    sizeBytes = bytes(f'{objSize:8X}', 'utf8')
+    return sizeBytes + objBytes
 #-------------------------------------------------------------------------
-class objRebuilder:
+class streamDecoder:
     def __init__(self):
         self.objSize = None
-        self.objBuilder = b''
+        self.objBuffer = b''
         self.objsList = []
     #-------------------------------------------------------------------------
     def insertBytes(self, data):
-        self.objBuilder += data
+        self.objBuffer += data
+        while len(self.objBuffer) > 0:
+            if self.objSize is None:
+                if len(self.objBuffer) >= 8:
+                    sizeBytes = self.objBuffer[:8]
+                    self.objBuffer = self.objBuffer[8:]
+                    self.objSize = int(sizeBytes, base = 16)
+                else:
+                    break
+            if self.objSize is not None:
+                if len(self.objBuffer) >= self.objSize:
+                    objBytes = self.objBuffer[:self.objSize]
+                    self.objBuffer = self.objBuffer[self.objSize:]
+                    obj = pickle.loads(objBytes)
+                    self.objsList.append(obj)
+                    self.objSize = None
+                else:
+                    break
     #-------------------------------------------------------------------------
     def getObject(self):
         if len(self.objsList) > 0:
@@ -39,7 +62,7 @@ class objOverTcp:
         self.rxBuffer  = b''
         self.sock      = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         if self.side == 'server':
-            #self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             self.sock.bind((self.address, self.port))
             logging.info('Waiting for incomming connection')
             self.sock.listen()
@@ -47,7 +70,6 @@ class objOverTcp:
             logging.info('Connected')
         else:
             logging.info('Waiting to connect')
-            #self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             self.sock.connect((self.address, self.port))
             self.conn = self.sock
             logging.info('Connected')
