@@ -5,6 +5,21 @@ import pickle
 BUFFER_SIZE = 65536
 logging.basicConfig(level=logging.INFO)
 #-------------------------------------------------------------------------
+class objRebuilder:
+    def __init__(self):
+        self.objSize = None
+        self.objBuilder = b''
+        self.objsList = []
+    #-------------------------------------------------------------------------
+    def insertBytes(self, data):
+        self.objBuilder += data
+    #-------------------------------------------------------------------------
+    def getObject(self):
+        if len(self.objsList) > 0:
+            return self.objsList.pop(0)
+        else:
+            return None
+#-------------------------------------------------------------------------
 class objOverTcp:
     #---------------------------------------------------------------------
     def __init__(self, side, address, port):
@@ -16,11 +31,15 @@ class objOverTcp:
             raise TypeError('The port attribute must be int')
         if not 0 < port < 65535:
             raise ValueError('The port attribute must be a int between 0 and 65535')
-        self.side    = side
-        self.address = address
-        self.port    = port
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+        self.side      = side
+        self.address   = address
+        self.port      = port
+        self.rxObjSize = None
+        self.rxBuffer  = b''
+        self.sock      = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         if self.side == 'server':
+            #self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             self.sock.bind((self.address, self.port))
             logging.info('Waiting for incomming connection')
             self.sock.listen()
@@ -28,14 +47,24 @@ class objOverTcp:
             logging.info('Connected')
         else:
             logging.info('Waiting to connect')
+            #self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             self.sock.connect((self.address, self.port))
+            self.conn = self.sock
             logging.info('Connected')
+    #---------------------------------------------------------------------
+    def __del__(self):
+        if 'side' in self.__dict__.keys():
+            if self.side == 'server':
+                self.conn.close()
+            self.sock.close()
     #---------------------------------------------------------------------
     def send(self, obj):
         pklObj = pickle.dumps(obj)
-        self.sock.sendall(pklObj)
+        self.conn.sendall(pklObj)
     #---------------------------------------------------------------------
     def receive(self):
         pklObj = self.conn.recv(BUFFER_SIZE)
+        print(f'len(pklObj) = {len(pklObj)}')
+        print(f'type(pklObj = {type(pklObj)}')
         obj = pickle.loads(pklObj)
         return obj
