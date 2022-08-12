@@ -5,7 +5,7 @@ import socket
 
 
 BUFFER_SIZE = 2048
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(message)s')
 
 def encode(obj):
     objBytes = pickle.dumps(obj)
@@ -34,7 +34,7 @@ class streamDecoder:
                     objBytes = self.objBuffer[:self.objSize]
                     self.objBuffer = self.objBuffer[self.objSize:]
                     obj = pickle.loads(objBytes)
-                    print(f'object {obj} received')
+                    logging.debug(f'object {obj} received')
                     self.objsList.append(obj)
                     self.objSize = None
                 else:
@@ -91,16 +91,14 @@ class objOverTcp:
     def receive(self, timeout = 0):
         if self.decoder.thereIsObject():
             return self.decoder.getObject()
-        while True:
-            readList  = [self.conn]
-            writeList = []
-            errorList = readList
-            readList, writeList, errorList = select.select(readList, writeList, errorList, timeout)
-            print('readList, writeList, errorList =', readList, writeList, errorList)
+        readList, writeList, errorList = select.select([self.conn], [], [self.conn], timeout)
+        while len(readList) > 0:
+            logging.debug(f'readList, writeList, errorList = {readList}, {writeList}, {errorList}')
             if len(readList) == 0: 
                 break
             data = self.conn.recv(BUFFER_SIZE)
             self.decoder.insertBytes(data)
+            readList, writeList, errorList = select.select([self.conn], [], [self.conn], 0)
         if self.decoder.thereIsObject():
             return self.decoder.getObject() 
         return None
