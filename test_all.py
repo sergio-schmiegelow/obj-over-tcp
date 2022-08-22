@@ -32,5 +32,7 @@ def test_encode_decode():
             break
     print(outList)
     assert(inList == outList)
-
+#-------------------------------------------------------------------------    
+def test_communication():
+    pass
     
