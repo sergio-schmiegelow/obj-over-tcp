@@ -1,5 +1,6 @@
 
 import asyncio
+from csv import reader
 import logging
 import pickle
 import select
@@ -126,41 +127,42 @@ class asyncObjOverTcp:
         self.port      = port
         self.callback  = callback
         self.decoder   = streamDecoder()
-        self.sock      = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.conn      = None
+        self.connected = False
+    #---------------------------------------------------------------------
+    async def clientConnectedCallback(self, reader, writer):
+        print('clientConnectedCallback')
+        self.reader = reader
+        self.writer = writer
+        self.connected  = True
+        self.receiverTask  = asyncio.create_task(self.receiverCorroutine)
+        #TODO Tratar múltiplas conexões
     #---------------------------------------------------------------------
     def isConnected(self):
-        print(f'DEBUG - self.conn = {self.conn}')
-        return self.conn is not None
+        return self.connected
     #---------------------------------------------------------------------
-    async def asyncTask(self):
-        if self.side == 'server':
-            self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            self.sock.bind((self.address, self.port))
-            logging.info('Waiting for incomming connection')
-            self.sock.listen()
-            self.conn, self.addr = self.sock.accept()
-            logging.info('Connected')
-        else:
-            logging.info('Waiting to connect')
-            self.sock.connect((self.address, self.port))
-            self.conn = self.sock
-            logging.info('Connected')
-        while self.conn is not None:
+    async def receiverCoroutine(self):
+        if self.isConnected():
+            data = await self.reader.read(BUFFER_SIZE)
+            self.decoder.insertBytes(data)
             if self.decoder.thereIsObject():
-                self.callback(self, self.decoder.getObject())
-            readList, writeList, errorList = select.select([self.conn], [], [self.conn], SELECT_TIME)
-            logging.debug(f'readList, writeList, errorList = {readList}, {writeList}, {errorList}')
-            #TODO tratar perda de conexão
-            if len(readList) > 0: 
-                data = self.conn.recv(BUFFER_SIZE)
-                self.decoder.insertBytes(data)
-            await asyncio.sleep(0.1)
-    #---------------------------------------------------------------------
-    def getAsyncTask(self):
-        return self.asyncTask        
+               self.callback(self.decoder.getObject())
+      #---------------------------------------------------------------------
+    async def startTasks(self):
+        if self.side == 'server':
+            self.server = await asyncio.start_server(self.clientConnectedCallback, self.address, self.port)
+            addrs = ', '.join(str(sock.getsockname()) for sock in server.sockets)
+            print(f'Serving on {addrs}')
+            self.listeningTask = asyncio.create_task(self.server)
+            
+        else: #client
+            self.reader, self.writer = await asyncio.open_connection(self.address, self.port)
+            self.connected  = True
+            print("Client_connected")
+            self.receiverTask  = asyncio.create_task(self.receiverCorroutine)
+            #TODO tratar falha de conexão
     #---------------------------------------------------------------------
     def __del__(self):
+        #TODO Implementar
         if 'side' in self.__dict__.keys():
             if self.side == 'server':
                 self.conn.close()
@@ -168,8 +170,8 @@ class asyncObjOverTcp:
         self.conn = None
     #---------------------------------------------------------------------
     def send(self, obj):
-        if self.conn is not None:
-            self.conn.sendall(encode(obj))
+        if self.isConnected():
+            self.self.writer.write(encode(obj))
         else:
             logging.warning('Not connected')
     
