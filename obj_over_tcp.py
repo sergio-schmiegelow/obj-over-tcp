@@ -1,4 +1,3 @@
-
 import asyncio
 from csv import reader
 import logging
@@ -110,7 +109,7 @@ class objOverTcp:
 #-------------------------------------------------------------------------
 class asyncObjOverTcp:
     #---------------------------------------------------------------------
-    def __init__(self, side, address, port, callback):
+    def __init__(self, side, address, port, cnxCallback, objCallback):
         if side not in ['server', 'client']:
             raise ValueError("The side attribute must be 'server' or 'client'")
         if type(address) is not str:
@@ -119,47 +118,64 @@ class asyncObjOverTcp:
             raise TypeError('The port attribute must be int')
         if not 0 < port < 65535:
             raise ValueError('The port attribute must be a int between 0 and 65535')
-        if not callable(callback):
-            raise TypeError('The callback attribute must callable')
+        if not callable(cnxCallback):
+            raise TypeError('The cnxCallback attribute must callable')
+        if not callable(objCallback):
+            raise TypeError('The objCallback attribute must callable')
 
-        self.side      = side
-        self.address   = address
-        self.port      = port
-        self.callback  = callback
-        self.decoder   = streamDecoder()
-        self.connected = False
+        self.side         = side
+        self.address      = address
+        self.port         = port
+        self.cnxCallback  = cnxCallback
+        self.objCallback  = objCallback
+        self.decoder      = streamDecoder()
+        self.connected    = False
+        if self.side == 'server':
+            self.serverTask  = asyncio.create_task(self.serverCoroutine())
+        else: #client
+            self.clientTask  = asyncio.create_task(self.clientCoroutine())
     #---------------------------------------------------------------------
     async def clientConnectedCallback(self, reader, writer):
         print('clientConnectedCallback')
         self.reader = reader
         self.writer = writer
         self.connected  = True
-        self.receiverTask  = asyncio.create_task(self.receiverCorroutine)
+        self.receiverTask  = asyncio.create_task(self.receiverCoroutine())
+        print(f'DEBUG - self.cnxCallback = {self.cnxCallback}')
+        await self.cnxCallback(self)
         #TODO Tratar múltiplas conexões
     #---------------------------------------------------------------------
     def isConnected(self):
         return self.connected
     #---------------------------------------------------------------------
     async def receiverCoroutine(self):
-        if self.isConnected():
-            data = await self.reader.read(BUFFER_SIZE)
-            self.decoder.insertBytes(data)
-            if self.decoder.thereIsObject():
-               self.callback(self.decoder.getObject())
-      #---------------------------------------------------------------------
-    async def startTasks(self):
-        if self.side == 'server':
-            self.server = await asyncio.start_server(self.clientConnectedCallback, self.address, self.port)
-            addrs = ', '.join(str(sock.getsockname()) for sock in server.sockets)
-            print(f'Serving on {addrs}')
-            self.listeningTask = asyncio.create_task(self.server)
-            
-        else: #client
-            self.reader, self.writer = await asyncio.open_connection(self.address, self.port)
-            self.connected  = True
-            print("Client_connected")
-            self.receiverTask  = asyncio.create_task(self.receiverCorroutine)
-            #TODO tratar falha de conexão
+        print('DEBUG receiverCoroutine')
+        while True:
+            if self.isConnected():
+                print('DEBUG receiverCoroutine, isConnected')
+                data = await self.reader.read(BUFFER_SIZE)
+                print(f'DEBUG - data = {data}')
+                self.decoder.insertBytes(data)
+                if self.decoder.thereIsObject():
+                   await self.objCallback(self, self.decoder.getObject())
+    #---------------------------------------------------------------------
+    async def serverCoroutine(self):
+        print(f'DEBUG - its a server')
+        self.server = await asyncio.start_server(self.clientConnectedCallback, self.address, self.port)
+        addrs = ', '.join(str(sock.getsockname()) for sock in self.server.sockets)
+        print(f'Serving on {addrs}')
+        await self.server.serve_forever()
+    #---------------------------------------------------------------------
+    async def clientCoroutine(self):
+        print(f'DEBUG - its a client')
+        self.reader, self.writer = await asyncio.open_connection(self.address, self.port)
+        self.connected  = True
+        print("Client_connected")
+        self.receiverTask  = asyncio.create_task(self.receiverCoroutine())
+        await self.cnxCallback(self)
+        await self.receiverTask 
+        #TODO tratar falha de conexão
+    '''
     #---------------------------------------------------------------------
     def __del__(self):
         #TODO Implementar
@@ -168,10 +184,15 @@ class asyncObjOverTcp:
                 self.conn.close()
             self.sock.close()
         self.conn = None
+    '''
     #---------------------------------------------------------------------
-    def send(self, obj):
+    async def send(self, obj):
+        print(f'DEBUG - asyncObjOverTcp.send({obj})')
         if self.isConnected():
-            self.self.writer.write(encode(obj))
+            print(f'DEBUG - asyncObjOverTcp.send({obj}) - isConnected')
+            self.writer.write(encode(obj))
+            await self.writer.drain()
+            print(f'{obj} was sent')
         else:
             logging.warning('Not connected')
     
