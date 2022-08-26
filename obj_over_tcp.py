@@ -153,7 +153,14 @@ class asyncObjOverTcp:
         while True:
             if self.isConnected():
                 print('DEBUG receiverCoroutine, isConnected')
-                data = await self.reader.read(BUFFER_SIZE)
+                try:
+                    data = await self.reader.read(BUFFER_SIZE)
+                except:
+                    data = b''
+                if len(data) == 0:
+                    self.connected = False
+                    print('Disconnected')
+                    break
                 print(f'DEBUG - data = {data}')
                 self.decoder.insertBytes(data)
                 if self.decoder.thereIsObject():
@@ -162,9 +169,9 @@ class asyncObjOverTcp:
     async def serverCoroutine(self):
         print(f'DEBUG - its a server')
         self.server = await asyncio.start_server(self.clientConnectedCallback, self.address, self.port)
+        print(f'DEBUG - self.server = {self.server}')
         addrs = ', '.join(str(sock.getsockname()) for sock in self.server.sockets)
         print(f'Serving on {addrs}')
-        await self.server.serve_forever()
     #---------------------------------------------------------------------
     async def clientCoroutine(self):
         print(f'DEBUG - its a client')
@@ -175,6 +182,7 @@ class asyncObjOverTcp:
         await self.cnxCallback(self)
         await self.receiverTask 
         #TODO tratar falha de conexão
+    
     '''
     #---------------------------------------------------------------------
     def __del__(self):
@@ -182,7 +190,8 @@ class asyncObjOverTcp:
         if 'side' in self.__dict__.keys():
             if self.side == 'server':
                 self.conn.close()
-            self.sock.close()
+            self.writer.close()
+            await self.writer.wait_closed()
         self.conn = None
     '''
     #---------------------------------------------------------------------
