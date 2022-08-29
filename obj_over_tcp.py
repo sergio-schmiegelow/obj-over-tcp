@@ -129,7 +129,7 @@ class asyncObjOverTcp:
         self.cnxCallback  = cnxCallback
         self.objCallback  = objCallback
         self.decoder      = streamDecoder()
-        self.connected    = False
+        self.connections  = []
         if self.side == 'server':
             self.serverTask  = asyncio.create_task(self.serverCoroutine())
         else: #client
@@ -137,34 +137,36 @@ class asyncObjOverTcp:
     #---------------------------------------------------------------------
     async def clientConnectedCallback(self, reader, writer):
         print('clientConnectedCallback')
-        self.reader = reader
-        self.writer = writer
-        self.connected  = True
-        self.receiverTask  = asyncio.create_task(self.receiverCoroutine())
+        connection = (reader, writer)
+        self.connections.append(connection)
+        self.receiverTask  = asyncio.create_task(self.receiverCoroutine(connection))
         print(f'DEBUG - self.cnxCallback = {self.cnxCallback}')
-        await self.cnxCallback(self)
+        await self.cnxCallback(self, connection)
         #TODO Tratar múltiplas conexões
     #---------------------------------------------------------------------
     def isConnected(self):
-        return self.connected
+        return len(self.connections) > 0
     #---------------------------------------------------------------------
-    async def receiverCoroutine(self):
+    async def receiverCoroutine(self, connection):
+        reader, writer = connection
         print('DEBUG receiverCoroutine')
         while True:
             if self.isConnected():
                 print('DEBUG receiverCoroutine, isConnected')
                 try:
-                    data = await self.reader.read(BUFFER_SIZE)
+                    data = await reader.read(BUFFER_SIZE)
                 except:
                     data = b''
                 if len(data) == 0:
-                    self.connected = False
+                    self.connections = []
+                    #TODO tratar múltiplas conexões
                     print('Disconnected')
+                    #TODO tratar desconexão
                     break
                 print(f'DEBUG - data = {data}')
                 self.decoder.insertBytes(data)
                 if self.decoder.thereIsObject():
-                   await self.objCallback(self, self.decoder.getObject())
+                   await self.objCallback(self, connection, self.decoder.getObject())
     #---------------------------------------------------------------------
     async def serverCoroutine(self):
         print(f'DEBUG - its a server')
@@ -175,14 +177,13 @@ class asyncObjOverTcp:
     #---------------------------------------------------------------------
     async def clientCoroutine(self):
         print(f'DEBUG - its a client')
-        self.reader, self.writer = await asyncio.open_connection(self.address, self.port)
-        self.connected  = True
+        connection = await asyncio.open_connection(self.address, self.port)
+        self.connections.append(connection)
         print("Client_connected")
-        self.receiverTask  = asyncio.create_task(self.receiverCoroutine())
-        await self.cnxCallback(self)
+        self.receiverTask  = asyncio.create_task(self.receiverCoroutine(connection))
+        await self.cnxCallback(self, connection)
         await self.receiverTask 
         #TODO tratar falha de conexão
-    
     '''
     #---------------------------------------------------------------------
     def __del__(self):
@@ -193,15 +194,21 @@ class asyncObjOverTcp:
             self.writer.close()
             await self.writer.wait_closed()
         self.conn = None
-    '''
     #---------------------------------------------------------------------
-    async def send(self, obj):
-        print(f'DEBUG - asyncObjOverTcp.send({obj})')
-        if self.isConnected():
-            print(f'DEBUG - asyncObjOverTcp.send({obj}) - isConnected')
-            self.writer.write(encode(obj))
-            await self.writer.drain()
-            print(f'{obj} was sent')
+    '''
+    async def send(self, obj, connection = None):
+        if connection is None:
+            if len(self.connections) == 0:
+                logging.warning('Not connected')
+                return
+            else:
+                reader, writer = self.connections[0]
         else:
-            logging.warning('Not connected')
+            reader, writer = connection
+        print(f'DEBUG - asyncObjOverTcp.send({obj})')
+        print(f'DEBUG - asyncObjOverTcp.send({obj}) - isConnected')
+        writer.write(encode(obj))
+        await writer.drain()
+        print(f'{obj} was sent')
+           
     
