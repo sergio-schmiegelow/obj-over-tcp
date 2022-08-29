@@ -158,15 +158,18 @@ class asyncObjOverTcp:
                 except:
                     data = b''
                 if len(data) == 0:
-                    self.connections = []
                     #TODO tratar múltiplas conexões
                     print('Disconnected')
+                    self.connections.remove(connection)
                     #TODO tratar desconexão
                     break
                 print(f'DEBUG - data = {data}')
                 self.decoder.insertBytes(data)
                 if self.decoder.thereIsObject():
                    await self.objCallback(self, connection, self.decoder.getObject())
+    #---------------------------------------------------------------------
+    def getConnections():
+        return self.connections()
     #---------------------------------------------------------------------
     async def serverCoroutine(self):
         print(f'DEBUG - its a server')
@@ -184,6 +187,21 @@ class asyncObjOverTcp:
         await self.cnxCallback(self, connection)
         await self.receiverTask 
         #TODO tratar falha de conexão
+    #---------------------------------------------------------------------
+    async def close(self, connection = None):
+        if connection is None:
+            for conn in self.connections:
+                reader, writer = conn
+                writer.close()
+                await writer.wait_closed()
+            if self.side == 'server':
+                self.server.close()
+                await self.server.wait_closed()
+        else:
+            reader, writer = connection
+            writer.close()
+            await writer.wait_closed()
+
     '''
     #---------------------------------------------------------------------
     def __del__(self):

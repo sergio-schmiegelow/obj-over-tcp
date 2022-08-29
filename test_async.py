@@ -1,7 +1,7 @@
 import asyncio
 from pydoc import cli
 import obj_over_tcp as oot
-#import pytest
+import pytest
 #-------------------------------------------------------------------------
 async def serverCoro():
     serverResList = []
@@ -21,7 +21,9 @@ async def serverCoro():
         await asyncio.sleep(0.1)
         print(f'serverResList = {serverResList}')
         if len(serverResList) > 0:
-            return serverResList[0]
+            await myOOT.close()
+            break
+    return serverResList[0]
 #-------------------------------------------------------------------------
 async def clientCoro():
     clientResList = []
@@ -41,9 +43,11 @@ async def clientCoro():
         await asyncio.sleep(0.1)
         print(f'clientResList = {clientResList}')
         if len(clientResList) > 0:
-            return clientResList[0]
+            await myOOT.close()
+            break
+    return clientResList[0]
 #-------------------------------------------------------------------------
-#@pytest.mark.asyncio
+@pytest.mark.asyncio
 async def test_client_server():        
     st = asyncio.create_task(serverCoro())
     await asyncio.sleep(0.1)
@@ -54,5 +58,5 @@ async def test_client_server():
     print(f'clientRes = {clientRes}')
     #assert (serverRes, clientRes) == ('request', 'answer')
 #-------------------------------------------------------------------------
-
-asyncio.run(test_client_server())
+if __name__ == '__main__':
+    asyncio.run(test_client_server())
