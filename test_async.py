@@ -56,7 +56,7 @@ async def test_client_server():
     clientRes = await(ct)
     print(f'serverRes = {serverRes}')
     print(f'clientRes = {clientRes}')
-    #assert (serverRes, clientRes) == ('request', 'answer')
+    assert (serverRes, clientRes) == ('request', 'answer')
 #-------------------------------------------------------------------------
 if __name__ == '__main__':
     asyncio.run(test_client_server())
