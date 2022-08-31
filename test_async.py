@@ -8,16 +8,19 @@ async def serverCoro():
     #---------------------------------------------------------------------
     async def callback(event):
         print(f'Server callback, eventType = {event.eventType}, ootObj = {event.ootObj}, userData = {event.userData}')
-        if event.eventType == oot.CONNECTED:
+        if event.eventType == oot.eventTypes.CONNECTED:
             print(f'Connected')
             print(f'connection = {event.connection}')
-        elif event.eventType == oot.OBJECT_RECEIVED:
-            print(f'Connected')
+        elif event.eventType == oot.eventTypes.DISCONNECTED:
+            print(f'Disconnected')
+            print(f'connection = {event.connection}')
+        elif event.eventType == oot.eventTypes.OBJECT_RECEIVED:
+            print(f'Object received')
             print(f'connection = {event.connection}')
             print(f'object = {event.object}')
             await event.ootObj.send('answer', event.connection)
             serverResList.append(event.object)
-        elif event.eventType == oot.ERROR:
+        elif event.eventType == oot.eventTypes.ERROR:
             print(f'Error')
             print(f'connection = {event.connection}')
             print(f'errorMsg = {event.errorMsg}')
@@ -38,16 +41,19 @@ async def clientCoro():
     clientResList = []
     async def callback(event):
         print(f'Client callback, eventType = {event.eventType}, ootObj = {event.ootObj}, userData = {event.userData}')
-        if event.eventType == oot.CONNECTED:
+        if event.eventType == oot.eventTypes.CONNECTED:
             print(f'Connected')
             print(f'connection = {event.connection}')
             await event.ootObj.send('request', event.connection)
-        elif event.eventType == oot.OBJECT_RECEIVED:
-            print(f'Connected')
+        elif event.eventType == oot.eventTypes.DISCONNECTED:
+            print(f'Disconnected')
+            print(f'connection = {event.connection}')
+        elif event.eventType == oot.eventTypes.OBJECT_RECEIVED:
+            print(f'Object received')
             print(f'connection = {event.connection}')
             print(f'object = {event.object}')
             clientResList.append(event.object)
-        elif event.eventType == oot.ERROR:
+        elif event.eventType == oot.eventTypes.ERROR:
             print(f'Error')
             print(f'connection = {event.connection}')
             print(f'errorMsg = {event.errorMsg}')

@@ -4,6 +4,7 @@ import logging
 import pickle
 import select
 import socket
+from enum import Enum, unique
 from types import SimpleNamespace
 
 
@@ -11,9 +12,13 @@ SELECT_TIME = 0.1
 BUFFER_SIZE = 2048
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(message)s')
 
-ERROR = -1
-CONNECTED = 1
-OBJECT_RECEIVED = 2
+@unique
+class eventTypes(Enum):
+    ERROR           = -1
+    CONNECTED       =  1
+    DISCONNECTED    =  2
+    DATA_RECEIVED   =  3
+    OBJECT_RECEIVED =  4
 
 #-------------------------------------------------------------------------
 def encode(obj):
@@ -113,7 +118,7 @@ class objOverTcp:
         return None
 
 #-------------------------------------------------------------------------
-class asyncObjOverTcp:
+class asyncSimpleTcp:
     #---------------------------------------------------------------------
     def __init__(self, side, address, port, callback, userData = None):
         if side not in ['server', 'client']:
@@ -132,7 +137,6 @@ class asyncObjOverTcp:
         self.port         = port
         self.callback     = callback
         self.userData     = userData
-        self.decoder      = streamDecoder()
         self.connections  = []
         self.running      = False
         if self.side == 'server':
@@ -145,13 +149,12 @@ class asyncObjOverTcp:
         connection = (reader, writer)
         self.connections.append(connection)
         self.receiverTask  = asyncio.create_task(self.receiverCoroutine(connection))
-        await self.callback(SimpleNamespace(eventType  = CONNECTED,
-                                                  ootObj     = self,
-                                                  object     = None,
-                                                  userData   = self.userData,
-                                                  connection = connection,
-                                                  errorMsg   = None))
-        #TODO Tratar múltiplas conexões
+        await self.callback(SimpleNamespace(eventType  = eventTypes.CONNECTED,
+                                            astObj     = self,
+                                            data       = None,
+                                            userData   = self.userData,
+                                            connection = connection,
+                                            errorMsg   = None))
     #---------------------------------------------------------------------
     def isConnected(self):
         return len(self.connections) > 0
@@ -167,22 +170,23 @@ class asyncObjOverTcp:
                 except:
                     data = b''
                 if len(data) == 0:
-                    #TODO tratar múltiplas conexões
                     print('Disconnected')
                     self.connections.remove(connection)
                     if self.side == 'client' and len(self.connections) == 0:
                         self.running = False
-                    #TODO tratar desconexão
+                    await self.callback(SimpleNamespace(eventType  = eventTypes.DISCONNECTED,
+                                                        astObj     = self,
+                                                        data       = None,
+                                                        userData   = self.userData,
+                                                        connection = connection,
+                                                        errorMsg   = None))
                     break
-                print(f'DEBUG - data = {data}')
-                self.decoder.insertBytes(data)
-                if self.decoder.thereIsObject():
-                   await self.callback(SimpleNamespace(eventType  = OBJECT_RECEIVED,
-                                                             ootObj     = self,
-                                                             object     = self.decoder.getObject(),
-                                                             userData   = self.userData,
-                                                             connection = connection,
-                                                             errorMsg   = None)) 
+                await self.callback(SimpleNamespace(eventType  = eventTypes.DATA_RECEIVED,
+                                                    astObj     = self,
+                                                    data       = data,
+                                                    userData   = self.userData,
+                                                    connection = connection,
+                                                    errorMsg   = None)) 
     #---------------------------------------------------------------------
     def getConnections(self):
         return self.connections()
@@ -196,12 +200,12 @@ class asyncObjOverTcp:
             self.server = await asyncio.start_server(self.clientConnectedCallback, self.address, self.port)
         except Exception as e:
             self.server = None
-            await self.callback(SimpleNamespace(eventType = ERROR,
-                                                      ootObj     = self,
-                                                      object     = None,
-                                                      userData   = self.userData,
-                                                      connection = None,
-                                                      errorMsg   = e)) 
+            await self.callback(SimpleNamespace(eventType = eventTypes.ERROR,
+                                                astObj     = self,
+                                                data       = None,
+                                                userData   = self.userData,
+                                                connection = None,
+                                                errorMsg   = e)) 
             return
         self.running = True    
         print(f'DEBUG - self.server = {self.server}')
@@ -213,26 +217,25 @@ class asyncObjOverTcp:
         try:
             connection = await asyncio.open_connection(self.address, self.port)
         except Exception as e:
-            await self.callback(SimpleNamespace(eventType  = ERROR,
-                                                      ootObj     = self,
-                                                      object     = None,
-                                                      userData   = self.userData,
-                                                      connection = None,
-                                                      errorMsg   = e)) 
+            await self.callback(SimpleNamespace(eventType  = eventTypes.ERROR,
+                                                astObj     = self,
+                                                object     = None,
+                                                userData   = self.userData,
+                                                connection = None,
+                                                errorMsg   = e)) 
             return
         self.running = True
         print(f'DEBUG 20220830134109 - connection = {connection}')
         self.connections.append(connection)
         print("Client_connected")
         self.receiverTask  = asyncio.create_task(self.receiverCoroutine(connection))
-        await self.callback(SimpleNamespace(eventType = CONNECTED,
-                                                  ootObj = self,
-                                                  object = None,
-                                                  userData = self.userData,
-                                                  connection = connection,
-                                                  errorMsg = None)) 
+        await self.callback(SimpleNamespace(eventType  = eventTypes.CONNECTED,
+                                            astObj     = self,
+                                            object     = None,
+                                            userData   = self.userData,
+                                            connection = connection,
+                                            errorMsg   = None)) 
         await self.receiverTask 
-        #TODO tratar falha de conexão
     #---------------------------------------------------------------------
     async def close(self, connection = None):
         if connection is None:
@@ -249,20 +252,8 @@ class asyncObjOverTcp:
             writer.close()
             await writer.wait_closed()
         self.running = False
-
-    '''
     #---------------------------------------------------------------------
-    def __del__(self):
-        #TODO Implementar
-        if 'side' in self.__dict__.keys():
-            if self.side == 'server':
-                self.conn.close()
-            self.writer.close()
-            await self.writer.wait_closed()
-        self.conn = None
-    #---------------------------------------------------------------------
-    '''
-    async def send(self, obj, connection = None):
+    async def send(self, data, connection = None):
         if connection is None:
             if len(self.connections) == 0:
                 logging.warning('Not connected')
@@ -271,10 +262,41 @@ class asyncObjOverTcp:
                 reader, writer = self.connections[0]
         else:
             reader, writer = connection
-        print(f'DEBUG - asyncObjOverTcp.send({obj})')
-        print(f'DEBUG - asyncObjOverTcp.send({obj}) - isConnected')
-        writer.write(encode(obj))
+        writer.write(data)
         await writer.drain()
-        print(f'{obj} was sent')
-           
-    
+#-------------------------------------------------------------------------
+class asyncObjOverTcp:
+    #---------------------------------------------------------------------
+    def __init__(self, side, address, port, userCallback, userData = None):
+        self.userCallback = userCallback
+        self.decoder      = streamDecoder()
+        self.AST = asyncSimpleTcp(side, address, port, self.innerCallback, userData)
+       
+    #---------------------------------------------------------------------
+    async def innerCallback(self, event):
+        print('DEBUG - innerCallback')
+        event.ootObj = self
+        if event.eventType == eventTypes.DATA_RECEIVED:
+            self.decoder.insertBytes(event.data)
+            if self.decoder.thereIsObject():
+                event.object = self.decoder.getObject()
+                event.eventType = eventTypes.OBJECT_RECEIVED
+                await self.userCallback(event)
+        else:
+            event.object = None
+            await self.userCallback(event)
+    #---------------------------------------------------------------------
+    def isConnected(self):
+        return self.AST.isConnected()
+    #---------------------------------------------------------------------
+    def getConnections(self):
+        return self.AST.getConnections()
+    #---------------------------------------------------------------------
+    def isRunning(self):
+        return self.AST.isRunning()
+    #---------------------------------------------------------------------
+    async def close(self, connection = None):
+        await self.AST.close(connection)
+    #---------------------------------------------------------------------
+    async def send(self, obj, connection = None):
+        await self.AST.send(encode(obj), connection)
