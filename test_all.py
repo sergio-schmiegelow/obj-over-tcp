@@ -1,3 +1,5 @@
+import asyncio
+from unittest import async_case
 import obj_over_tcp as oot
 import pytest
 MAX_SEGMENT_SIZE = 1500
@@ -33,6 +35,19 @@ def test_encode_decode():
     print(outList)
     assert(inList == outList)
 #-------------------------------------------------------------------------    
-def test_communication():
+
+async def cnxCallback(OOT, connection):
     pass
-    
+async def objRxCallback(OOT, connection, obj):
+    pass
+
+async def main():
+    #myOOT = oot.asyncObjOverTcp('client', '127.0.0.1', 10000, cnxCallback, objRxCallback)
+    #myOOT = oot.asyncObjOverTcp('client', 'lixo', 10000, cnxCallback, objRxCallback)
+    #myOOT = oot.asyncObjOverTcp('server', '0.0.0.0', 10000, cnxCallback, objRxCallback)
+    myOOT = oot.asyncObjOverTcp('server', '1.2.3.4', 10000, cnxCallback, objRxCallback)
+    await asyncio.sleep(1)
+    print(f'myOOT.isRunning() = {myOOT.isRunning()}')
+    await(myOOT.close())
+
+asyncio.run(main())

@@ -130,6 +130,7 @@ class asyncObjOverTcp:
         self.objCallback  = objCallback
         self.decoder      = streamDecoder()
         self.connections  = []
+        self.running      = False
         if self.side == 'server':
             self.serverTask  = asyncio.create_task(self.serverCoroutine())
         else: #client
@@ -161,6 +162,8 @@ class asyncObjOverTcp:
                     #TODO tratar múltiplas conexões
                     print('Disconnected')
                     self.connections.remove(connection)
+                    if self.side == 'client' and len(self.connections) == 0:
+                        self.running = False
                     #TODO tratar desconexão
                     break
                 print(f'DEBUG - data = {data}')
@@ -168,19 +171,32 @@ class asyncObjOverTcp:
                 if self.decoder.thereIsObject():
                    await self.objCallback(self, connection, self.decoder.getObject())
     #---------------------------------------------------------------------
-    def getConnections():
+    def getConnections(self):
         return self.connections()
+    #---------------------------------------------------------------------
+    def isRunning(self):
+        return self.running
     #---------------------------------------------------------------------
     async def serverCoroutine(self):
         print(f'DEBUG - its a server')
-        self.server = await asyncio.start_server(self.clientConnectedCallback, self.address, self.port)
+        try:
+            self.server = await asyncio.start_server(self.clientConnectedCallback, self.address, self.port)
+        except:
+            self.server = None
+            return
+        self.running = True    
         print(f'DEBUG - self.server = {self.server}')
         addrs = ', '.join(str(sock.getsockname()) for sock in self.server.sockets)
         print(f'Serving on {addrs}')
     #---------------------------------------------------------------------
     async def clientCoroutine(self):
         print(f'DEBUG - its a client')
-        connection = await asyncio.open_connection(self.address, self.port)
+        try:
+            connection = await asyncio.open_connection(self.address, self.port)
+        except:
+            return
+        self.running = True
+        print(f'DEBUG 20220830134109 - connection = {connection}')
         self.connections.append(connection)
         print("Client_connected")
         self.receiverTask  = asyncio.create_task(self.receiverCoroutine(connection))
@@ -195,12 +211,14 @@ class asyncObjOverTcp:
                 writer.close()
                 await writer.wait_closed()
             if self.side == 'server':
-                self.server.close()
-                await self.server.wait_closed()
+                if self.server is not None:
+                    self.server.close()
+                    await self.server.wait_closed()
         else:
             reader, writer = connection
             writer.close()
             await writer.wait_closed()
+        self.running = False
 
     '''
     #---------------------------------------------------------------------
