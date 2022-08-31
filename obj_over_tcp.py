@@ -4,12 +4,18 @@ import logging
 import pickle
 import select
 import socket
+from types import SimpleNamespace
 
 
 SELECT_TIME = 0.1
 BUFFER_SIZE = 2048
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(message)s')
 
+ERROR = -1
+CONNECTED = 1
+OBJECT_RECEIVED = 2
+
+#-------------------------------------------------------------------------
 def encode(obj):
     objBytes = pickle.dumps(obj)
     objSize = len(objBytes)
@@ -109,7 +115,7 @@ class objOverTcp:
 #-------------------------------------------------------------------------
 class asyncObjOverTcp:
     #---------------------------------------------------------------------
-    def __init__(self, side, address, port, cnxCallback, objCallback):
+    def __init__(self, side, address, port, callback, userData = None):
         if side not in ['server', 'client']:
             raise ValueError("The side attribute must be 'server' or 'client'")
         if type(address) is not str:
@@ -118,16 +124,14 @@ class asyncObjOverTcp:
             raise TypeError('The port attribute must be int')
         if not 0 < port < 65535:
             raise ValueError('The port attribute must be a int between 0 and 65535')
-        if not callable(cnxCallback):
-            raise TypeError('The cnxCallback attribute must callable')
-        if not callable(objCallback):
-            raise TypeError('The objCallback attribute must callable')
-
+        if not callable(callback):
+            raise TypeError('The callback attribute must callable')
+ 
         self.side         = side
         self.address      = address
         self.port         = port
-        self.cnxCallback  = cnxCallback
-        self.objCallback  = objCallback
+        self.callback     = callback
+        self.userData     = userData
         self.decoder      = streamDecoder()
         self.connections  = []
         self.running      = False
@@ -141,8 +145,12 @@ class asyncObjOverTcp:
         connection = (reader, writer)
         self.connections.append(connection)
         self.receiverTask  = asyncio.create_task(self.receiverCoroutine(connection))
-        print(f'DEBUG - self.cnxCallback = {self.cnxCallback}')
-        await self.cnxCallback(self, connection)
+        await self.callback(SimpleNamespace(eventType  = CONNECTED,
+                                                  ootObj     = self,
+                                                  object     = None,
+                                                  userData   = self.userData,
+                                                  connection = connection,
+                                                  errorMsg   = None))
         #TODO Tratar múltiplas conexões
     #---------------------------------------------------------------------
     def isConnected(self):
@@ -169,7 +177,12 @@ class asyncObjOverTcp:
                 print(f'DEBUG - data = {data}')
                 self.decoder.insertBytes(data)
                 if self.decoder.thereIsObject():
-                   await self.objCallback(self, connection, self.decoder.getObject())
+                   await self.callback(SimpleNamespace(eventType  = OBJECT_RECEIVED,
+                                                             ootObj     = self,
+                                                             object     = self.decoder.getObject(),
+                                                             userData   = self.userData,
+                                                             connection = connection,
+                                                             errorMsg   = None)) 
     #---------------------------------------------------------------------
     def getConnections(self):
         return self.connections()
@@ -181,8 +194,14 @@ class asyncObjOverTcp:
         print(f'DEBUG - its a server')
         try:
             self.server = await asyncio.start_server(self.clientConnectedCallback, self.address, self.port)
-        except:
+        except Exception as e:
             self.server = None
+            await self.callback(SimpleNamespace(eventType = ERROR,
+                                                      ootObj     = self,
+                                                      object     = None,
+                                                      userData   = self.userData,
+                                                      connection = None,
+                                                      errorMsg   = e)) 
             return
         self.running = True    
         print(f'DEBUG - self.server = {self.server}')
@@ -193,14 +212,25 @@ class asyncObjOverTcp:
         print(f'DEBUG - its a client')
         try:
             connection = await asyncio.open_connection(self.address, self.port)
-        except:
+        except Exception as e:
+            await self.callback(SimpleNamespace(eventType  = ERROR,
+                                                      ootObj     = self,
+                                                      object     = None,
+                                                      userData   = self.userData,
+                                                      connection = None,
+                                                      errorMsg   = e)) 
             return
         self.running = True
         print(f'DEBUG 20220830134109 - connection = {connection}')
         self.connections.append(connection)
         print("Client_connected")
         self.receiverTask  = asyncio.create_task(self.receiverCoroutine(connection))
-        await self.cnxCallback(self, connection)
+        await self.callback(SimpleNamespace(eventType = CONNECTED,
+                                                  ootObj = self,
+                                                  object = None,
+                                                  userData = self.userData,
+                                                  connection = connection,
+                                                  errorMsg = None)) 
         await self.receiverTask 
         #TODO tratar falha de conexão
     #---------------------------------------------------------------------
