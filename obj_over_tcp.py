@@ -265,13 +265,12 @@ class asyncSimpleTcp:
         writer.write(data)
         await writer.drain()
 #-------------------------------------------------------------------------
-class asyncObjOverTcp:
+class asyncObjOverTcp(asyncSimpleTcp):
     #---------------------------------------------------------------------
     def __init__(self, side, address, port, userCallback, userData = None):
+        super().__init__(side, address, port, self.innerCallback, userData)
         self.userCallback = userCallback
         self.decoder      = streamDecoder()
-        self.AST = asyncSimpleTcp(side, address, port, self.innerCallback, userData)
-       
     #---------------------------------------------------------------------
     async def innerCallback(self, event):
         print('DEBUG - innerCallback')
@@ -286,17 +285,5 @@ class asyncObjOverTcp:
             event.object = None
             await self.userCallback(event)
     #---------------------------------------------------------------------
-    def isConnected(self):
-        return self.AST.isConnected()
-    #---------------------------------------------------------------------
-    def getConnections(self):
-        return self.AST.getConnections()
-    #---------------------------------------------------------------------
-    def isRunning(self):
-        return self.AST.isRunning()
-    #---------------------------------------------------------------------
-    async def close(self, connection = None):
-        await self.AST.close(connection)
-    #---------------------------------------------------------------------
     async def send(self, obj, connection = None):
-        await self.AST.send(encode(obj), connection)
+        await super().send(encode(obj), connection)
