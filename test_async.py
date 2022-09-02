@@ -18,6 +18,7 @@ async def serverCoro():
         elif event.eventType == oot.eventTypes.DISCONNECTED:
             print(f'Disconnected')
             print(f'connection = {event.connection}')
+            await event.ootObj.close()
         elif event.eventType == oot.eventTypes.OBJECT_RECEIVED:
             print(f'Object received')
             print(f'connection = {event.connection}')
@@ -31,13 +32,9 @@ async def serverCoro():
             raise Exception('Unknown eventType')
     #---------------------------------------------------------------------
     myOOT = oot.asyncObjOverTcp('server', '0.0.0.0', 10000, callback, 'server user data')
-    while True:
+    while myOOT.isRunning():
         print('serverCoro loop')
         await asyncio.sleep(0.1)
-        print(f'serverResList = {serverResList}')
-        if len(serverResList) > 0:
-            await myOOT.close()
-            break
     return serverResList[0]
 #-------------------------------------------------------------------------
 async def clientCoro():
@@ -56,6 +53,7 @@ async def clientCoro():
             print(f'connection = {event.connection}')
             print(f'object = {event.object}')
             clientResList.append(event.object)
+            await event.ootObj.close()
         elif event.eventType == oot.eventTypes.ERROR:
             print(f'Error')
             print(f'connection = {event.connection}')
@@ -67,13 +65,9 @@ async def clientCoro():
             raise Exception('Unknown eventType')
     #---------------------------------------------------------------------
     myOOT = oot.asyncObjOverTcp('client', '127.0.0.1', 10000, callback)
-    while True:
+    while myOOT.isRunning():
         print('clientCoro loop')
         await asyncio.sleep(0.1)
-        print(f'clientResList = {clientResList}')
-        if len(clientResList) > 0:
-            await myOOT.close()
-            break
     return clientResList[0]
 #-------------------------------------------------------------------------
 @pytest.mark.asyncio

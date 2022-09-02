@@ -77,22 +77,31 @@ class objOverTcp:
         if not 0 < port < 65535:
             raise ValueError('The port attribute must be a int between 0 and 65535')
 
-        self.side      = side
-        self.address   = address
-        self.port      = port
-        self.decoder   = streamDecoder()
-        self.sock      = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.side        = side
+        self.address     = address
+        self.port        = port
+        self.decoder     = streamDecoder()
+        self.connections = []
         if self.side == 'server':
-            self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            self.sock.bind((self.address, self.port))
-            logging.info('Waiting for incomming connection')
-            self.sock.listen()
-            self.conn, self.addr = self.sock.accept()
-            logging.info('Connected')
+            self.listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self.listener.bind((self.address, self.port))
         else:
             logging.info('Waiting to connect')
             self.sock.connect((self.address, self.port))
-            self.conn = self.sock
+            self.connections.append((self.addr, self.sock))
+            logging.info('Connected')
+    #---------------------------------------------------------------------
+    def poll(self):
+        if self.side == 'server':
+            logging.info('Checking for incomming connections')
+            self.listener.listen()
+            self.conn, self.addr = self.sock.accept()
+            logging.info('New connection')#AQUI
+        else:
+            logging.info('Waiting to connect')
+            self.sock.connect((self.address, self.port))
+            self.connections.append((self.addr, self.sock))
             logging.info('Connected')
     #---------------------------------------------------------------------
     def __del__(self):
