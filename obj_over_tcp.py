@@ -14,12 +14,14 @@ logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(message)s')
 
 @unique
 class eventTypes(Enum):
-    ERROR           = -1
-    CONNECTED       =  1
-    DISCONNECTED    =  2
-    DATA_RECEIVED   =  3
-    OBJECT_RECEIVED =  4
+    ERROR           =  1
+    CONNECTED       =  2
+    DISCONNECTED    =  4
+    DATA_RECEIVED   =  8
+    OBJECT_RECEIVED = 16
+    DATA_SENT       = 32
 
+DEFAULT_EVENTS = sum([event.value for event in list(eventTypes)])
 #-------------------------------------------------------------------------
 def encode(obj):
     objBytes = pickle.dumps(obj)
@@ -120,7 +122,7 @@ class objOverTcp:
 #-------------------------------------------------------------------------
 class asyncSimpleTcp:
     #---------------------------------------------------------------------
-    def __init__(self, side, address, port, callback, userData = None):
+    def __init__(self, side, address, port, callback, callbackEvents = DEFAULT_EVENTS, userData = None):
         if side not in ['server', 'client']:
             raise ValueError("The side attribute must be 'server' or 'client'")
         if type(address) is not str:
@@ -132,13 +134,14 @@ class asyncSimpleTcp:
         if not callable(callback):
             raise TypeError('The callback attribute must callable')
  
-        self.side         = side
-        self.address      = address
-        self.port         = port
-        self.callback     = callback
-        self.userData     = userData
-        self.connections  = []
-        self.running      = False
+        self.side           = side
+        self.address        = address
+        self.port           = port
+        self.callback       = callback
+        self.callbackEvents = callbackEvents
+        self.userData       = userData
+        self.connections    = []
+        self.running        = True
         if self.side == 'server':
             self.serverTask  = asyncio.create_task(self.serverCoroutine())
         else: #client
@@ -200,6 +203,7 @@ class asyncSimpleTcp:
             self.server = await asyncio.start_server(self.clientConnectedCallback, self.address, self.port)
         except Exception as e:
             self.server = None
+            self.running = False
             await self.callback(SimpleNamespace(eventType = eventTypes.ERROR,
                                                 astObj     = self,
                                                 data       = None,
@@ -207,7 +211,7 @@ class asyncSimpleTcp:
                                                 connection = None,
                                                 errorMsg   = e)) 
             return
-        self.running = True    
+           
         print(f'DEBUG - self.server = {self.server}')
         addrs = ', '.join(str(sock.getsockname()) for sock in self.server.sockets)
         print(f'Serving on {addrs}')
@@ -217,6 +221,7 @@ class asyncSimpleTcp:
         try:
             connection = await asyncio.open_connection(self.address, self.port)
         except Exception as e:
+            self.running = False
             await self.callback(SimpleNamespace(eventType  = eventTypes.ERROR,
                                                 astObj     = self,
                                                 object     = None,
@@ -224,7 +229,6 @@ class asyncSimpleTcp:
                                                 connection = None,
                                                 errorMsg   = e)) 
             return
-        self.running = True
         print(f'DEBUG 20220830134109 - connection = {connection}')
         self.connections.append(connection)
         print("Client_connected")
@@ -253,22 +257,38 @@ class asyncSimpleTcp:
             await writer.wait_closed()
         self.running = False
     #---------------------------------------------------------------------
-    async def send(self, data, connection = None):
+    async def sendCoro(self, data, connection):
+        print(f'DEBUG - sendCoro({data}, {connection})')
+        reader, writer = connection
+        writer.write(data)
+        await writer.drain()
+        await self.callback(SimpleNamespace(eventType  = eventTypes.DATA_SENT,
+                                            astObj     = self,
+                                            object     = None,
+                                            userData   = self.userData,
+                                            connection = connection,
+                                            errorMsg   = None)) 
+    #---------------------------------------------------------------------
+    async def send(self, data, connection = None, blocking = False):
         if connection is None:
             if len(self.connections) == 0:
                 logging.warning('Not connected')
                 return
             else:
-                reader, writer = self.connections[0]
+                innerConnection = self.connections[0]
         else:
+            innerConnection = connection
+        if blocking:
             reader, writer = connection
-        writer.write(data)
-        await writer.drain()
+            writer.write(data)
+            await writer.drain()
+        else:
+            asyncio.create_task(self.sendCoro(data, innerConnection))
 #-------------------------------------------------------------------------
 class asyncObjOverTcp(asyncSimpleTcp):
     #---------------------------------------------------------------------
-    def __init__(self, side, address, port, userCallback, userData = None):
-        super().__init__(side, address, port, self.innerCallback, userData)
+    def __init__(self, side, address, port, userCallback, callbackEvents = DEFAULT_EVENTS, userData = None):
+        super().__init__(side, address, port, self.innerCallback, callbackEvents, userData)
         self.userCallback = userCallback
         self.decoder      = streamDecoder()
     #---------------------------------------------------------------------

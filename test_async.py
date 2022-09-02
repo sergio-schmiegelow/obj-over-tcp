@@ -8,7 +8,11 @@ async def serverCoro():
     #---------------------------------------------------------------------
     async def callback(event):
         print(f'Server callback, eventType = {event.eventType}, ootObj = {event.ootObj}, userData = {event.userData}')
-        if event.eventType == oot.eventTypes.CONNECTED:
+        if event.eventType == oot.eventTypes.ERROR:
+            print(f'Error')
+            print(f'connection = {event.connection}')
+            print(f'errorMsg = {event.errorMsg}')
+        elif event.eventType == oot.eventTypes.CONNECTED:
             print(f'Connected')
             print(f'connection = {event.connection}')
         elif event.eventType == oot.eventTypes.DISCONNECTED:
@@ -20,10 +24,9 @@ async def serverCoro():
             print(f'object = {event.object}')
             await event.ootObj.send('answer', event.connection)
             serverResList.append(event.object)
-        elif event.eventType == oot.eventTypes.ERROR:
-            print(f'Error')
+        elif event.eventType == oot.eventTypes.DATA_SENT:
+            print(f'Data sent')
             print(f'connection = {event.connection}')
-            print(f'errorMsg = {event.errorMsg}')
         else:
             raise Exception('Unknown eventType')
     #---------------------------------------------------------------------
@@ -57,6 +60,9 @@ async def clientCoro():
             print(f'Error')
             print(f'connection = {event.connection}')
             print(f'errorMsg = {event.errorMsg}')
+        elif event.eventType == oot.eventTypes.DATA_SENT:
+            print(f'Data sent')
+            print(f'connection = {event.connection}')
         else:
             raise Exception('Unknown eventType')
     #---------------------------------------------------------------------
