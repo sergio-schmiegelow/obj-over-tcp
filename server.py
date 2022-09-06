@@ -4,9 +4,12 @@ import time
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(message)s')
 
-myCnx = oot.objOverTcp('server', '0.0.0.0', 10000)
-obj = myCnx.receive(1)
-logging.debug(obj)
-myDict = {'aa':11, 'bb':22}
-myCnx.send(myDict)
-time.sleep(1)
+myServer = oot.objOverTcp('server', '0.0.0.0', 10000)
+
+while True:
+    event = myServer.poll()
+    if event is not None:
+        print(f'server event = {event}')
+        if event.eventType == oot.eventTypes.OBJECT_RECEIVED:
+            myServer.send(event.object, event.connection)
+    time.sleep(0.1)

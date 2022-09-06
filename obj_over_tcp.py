@@ -65,7 +65,7 @@ class streamDecoder:
         else:
             return None
 #-------------------------------------------------------------------------
-class objOverTcp:
+class simpleTcp:
     #---------------------------------------------------------------------
     def __init__(self, side, address, port):
         if side not in ['server', 'client']:
@@ -76,58 +76,147 @@ class objOverTcp:
             raise TypeError('The port attribute must be int')
         if not 0 < port < 65535:
             raise ValueError('The port attribute must be a int between 0 and 65535')
-
         self.side        = side
         self.address     = address
         self.port        = port
-        self.decoder     = streamDecoder()
         self.connections = []
+        self.pendingEvent = None
         if self.side == 'server':
-            self.listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            self.listener.bind((self.address, self.port))
-        else:
-            logging.info('Waiting to connect')
-            self.sock.connect((self.address, self.port))
-            self.connections.append((self.addr, self.sock))
-            logging.info('Connected')
+            try:
+                self.listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                self.listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                self.listener.bind((self.address, self.port))
+                self.listener.setblocking(0)
+                self.listener.listen()
+            except Exception as e:
+                self.pendingEvent = SimpleNamespace(eventType  = eventTypes.ERROR,
+                                                    ootObj     = self,
+                                                    data       = None,
+                                                    connection = None,
+                                                    errorMsg   = e)
     #---------------------------------------------------------------------
     def poll(self):
+        #print(f'DEBUG - simpleTcp.poll')
+        if self.pendingEvent is not None:
+            return self.pendingEvent
+            self.pendingEvent = None
         if self.side == 'server':
-            logging.info('Checking for incomming connections')
-            self.listener.listen()
-            self.conn, self.addr = self.sock.accept()
-            logging.info('New connection')#AQUI
+            #logging.info('Checking for incomming connections')
+            try:
+                connection =  self.listener.accept()
+            except:
+                #print('No incomming connection')
+                pass
+            else:
+                self.connections.append(connection)
+                logging.info('New connection')
+                return SimpleNamespace(eventType  = eventTypes.CONNECTED,
+                                       data       = None,
+                                       connection = connection,
+                                       errorMsg   = None)
+        else: #client
+            if len(self.connections) == 0:
+                logging.info('Trying to connect')
+                try:
+                    self.clientSock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    self.clientSock.connect((self.address, self.port))
+                except:
+                    logging.info('Fail to connect')
+                else:
+                    logging.info('Connected')
+                    connection = (self.clientSock, self.address)
+                    self.connections.append(connection)
+                    return SimpleNamespace(eventType  = eventTypes.CONNECTED,
+                                           data       = None,
+                                           connection = connection,
+                                           errorMsg   = None)
+        #print(f'DEBUG - self.connections = {self.connections}') 
+        conectionsToRemove = []  
+        eventToReturn = None         
+        for connection in self.connections:
+            conn, addr = connection
+            #logging.info('Waiting incomming data')
+            readable, writable, errorable = select.select([conn],[],[], 0)
+            if conn in readable:
+                data = conn.recv(BUFFER_SIZE)
+                if len(data) > 0:
+                    logging.info(f'Data received:{data}')
+                    return SimpleNamespace(eventType  = eventTypes.DATA_RECEIVED,
+                                           data       = data,
+                                           connection = connection,
+                                           errorMsg   = None)
+                else:
+                    logging.info(f'Disconnected')
+                    conectionsToRemove.append(connection)
+                    eventToReturn = SimpleNamespace(eventType  = eventTypes.DISCONNECTED,
+                                                    data       = None,
+                                                    connection = connection,
+                                                    errorMsg   = None)
+        for connection in conectionsToRemove:
+            self.connections.remove(connection)
+        return eventToReturn
+    #---------------------------------------------------------------------
+    def close(connection = None):
+        if connection is None:
+            self.__del__()
+            self.connections = []
         else:
-            logging.info('Waiting to connect')
-            self.sock.connect((self.address, self.port))
-            self.connections.append((self.addr, self.sock))
-            logging.info('Connected')
+            conn, address = connection
+            conn.close()
+            self.connections.close(connection)
     #---------------------------------------------------------------------
     def __del__(self):
         if 'side' in self.__dict__.keys():
             if self.side == 'server':
-                self.conn.close()
-            self.sock.close()
+                self.listener.close()
+        for connection in self.connections:
+            conn, address = connection
+            conn.close()
     #---------------------------------------------------------------------
-    def send(self, obj):
-        self.conn.sendall(encode(obj))
+    def send(self, data, connection = None):
+        if len(self.connections) == 0:
+            logging.error('Not connected')
+            return
+        if connection is None:
+            if self.side == 'server':
+                logging.error('On server side, must specify a connection')
+                return
+            if self.side == 'client':
+                connection = self.connections[0]
+        conn, addr = connection  
+        conn.sendall(data)
+        print(f'{self.side}, sent {data}')
+   
+#-------------------------------------------------------------------------
+class objOverTcp(simpleTcp):
+    def __init__(self, side, address, port):
+        super().__init__(side, address, port)
+        self.decoder    = streamDecoder()
+        self.eventsList = []
     #---------------------------------------------------------------------
-    def receive(self, timeout = 0):
-        if self.decoder.thereIsObject():
-            return self.decoder.getObject()
-        readList, writeList, errorList = select.select([self.conn], [], [self.conn], timeout)
-        while len(readList) > 0:
-            logging.debug(f'readList, writeList, errorList = {readList}, {writeList}, {errorList}')
-            if len(readList) == 0: 
-                break
-            data = self.conn.recv(BUFFER_SIZE)
-            self.decoder.insertBytes(data)
-            readList, writeList, errorList = select.select([self.conn], [], [self.conn], 0)
-        if self.decoder.thereIsObject():
-            return self.decoder.getObject() 
+    def poll(self):
+        if len(self.eventsList) > 0:
+            return(self.eventsList.pop(0))
+        event = super().poll()
+        if event is None:
+            return None
+        if event.eventType == eventTypes.DATA_RECEIVED:
+            self.decoder.insertBytes(event.data)
+            while self.decoder.thereIsObject():
+                self.eventsList.append(SimpleNamespace(eventType  = eventTypes.OBJECT_RECEIVED,
+                                                       object     = self.decoder.getObject(),
+                                                       connection = event.connection,
+                                                       errorMsg   = None))
+        else:
+            event.object = None
+            self.eventsList.append(event)
+        if len(self.eventsList) > 0:
+            return(self.eventsList.pop(0))
         return None
-
+    #---------------------------------------------------------------------
+    def send(self, obj, connection = None):
+        print(f'DEBUG 20220906182450 - obj = {obj}, connection = {connection}')
+        super().send(encode(obj), connection)
 #-------------------------------------------------------------------------
 class asyncSimpleTcp:
     #---------------------------------------------------------------------
@@ -306,7 +395,7 @@ class asyncObjOverTcp(asyncSimpleTcp):
         event.ootObj = self
         if event.eventType == eventTypes.DATA_RECEIVED:
             self.decoder.insertBytes(event.data)
-            if self.decoder.thereIsObject():
+            while self.decoder.thereIsObject():
                 event.object = self.decoder.getObject()
                 event.eventType = eventTypes.OBJECT_RECEIVED
                 await self.userCallback(event)
