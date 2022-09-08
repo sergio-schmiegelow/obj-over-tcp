@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 SELECT_TIME = 0.1
 BUFFER_SIZE = 2048
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s')
 
 @unique
 class eventTypes(Enum):
@@ -96,57 +96,54 @@ class simpleTcp:
                                                     errorMsg   = e)
     #---------------------------------------------------------------------
     def poll(self):
-        #print(f'DEBUG - simpleTcp.poll')
         if self.pendingEvent is not None:
             return self.pendingEvent
             self.pendingEvent = None
         if self.side == 'server':
-            #logging.info('Checking for incomming connections')
+            logging.debug('Checking for incomming connections')
             try:
                 connection =  self.listener.accept()
             except:
-                #print('No incomming connection')
                 pass
             else:
                 self.connections.append(connection)
-                logging.info('New connection')
+                logging.debug('New connection')
                 return SimpleNamespace(eventType  = eventTypes.CONNECTED,
                                        data       = None,
                                        connection = connection,
                                        errorMsg   = None)
         else: #client
             if len(self.connections) == 0:
-                logging.info('Trying to connect')
+                logging.debug('Trying to connect')
                 try:
                     self.clientSock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     self.clientSock.connect((self.address, self.port))
                 except:
-                    logging.info('Fail to connect')
+                    logging.debug('Fail to connect')
                 else:
-                    logging.info('Connected')
+                    logging.debug('Connected')
                     connection = (self.clientSock, self.address)
                     self.connections.append(connection)
                     return SimpleNamespace(eventType  = eventTypes.CONNECTED,
                                            data       = None,
                                            connection = connection,
                                            errorMsg   = None)
-        #print(f'DEBUG - self.connections = {self.connections}') 
         conectionsToRemove = []  
         eventToReturn = None         
         for connection in self.connections:
             conn, addr = connection
-            #logging.info('Waiting incomming data')
+            logging.debug('Waiting incomming data')
             readable, writable, errorable = select.select([conn],[],[], 0)
             if conn in readable:
                 data = conn.recv(BUFFER_SIZE)
                 if len(data) > 0:
-                    logging.info(f'Data received:{data}')
+                    logging.debug(f'({self.side}) Data received:{data}')
                     return SimpleNamespace(eventType  = eventTypes.DATA_RECEIVED,
                                            data       = data,
                                            connection = connection,
                                            errorMsg   = None)
                 else:
-                    logging.info(f'Disconnected')
+                    logging.debug(f'Disconnected')
                     conectionsToRemove.append(connection)
                     eventToReturn = SimpleNamespace(eventType  = eventTypes.DISCONNECTED,
                                                     data       = None,
@@ -156,14 +153,14 @@ class simpleTcp:
             self.connections.remove(connection)
         return eventToReturn
     #---------------------------------------------------------------------
-    def close(connection = None):
+    def close(self, connection = None):
         if connection is None:
             self.__del__()
             self.connections = []
         else:
             conn, address = connection
             conn.close()
-            self.connections.close(connection)
+            self.connections.remove(connection)
     #---------------------------------------------------------------------
     def __del__(self):
         if 'side' in self.__dict__.keys():
@@ -185,7 +182,7 @@ class simpleTcp:
                 connection = self.connections[0]
         conn, addr = connection  
         conn.sendall(data)
-        print(f'{self.side}, sent {data}')
+        logging.debug(f'{self.side}, sent {data}')
    
 #-------------------------------------------------------------------------
 class objOverTcp(simpleTcp):
@@ -215,7 +212,6 @@ class objOverTcp(simpleTcp):
         return None
     #---------------------------------------------------------------------
     def send(self, obj, connection = None):
-        print(f'DEBUG 20220906182450 - obj = {obj}, connection = {connection}')
         super().send(encode(obj), connection)
 #-------------------------------------------------------------------------
 class asyncSimpleTcp:
@@ -246,7 +242,6 @@ class asyncSimpleTcp:
             self.clientTask  = asyncio.create_task(self.clientCoroutine())
     #---------------------------------------------------------------------
     async def clientConnectedCallback(self, reader, writer):
-        print('clientConnectedCallback')
         connection = (reader, writer)
         self.connections.append(connection)
         self.receiverTask  = asyncio.create_task(self.receiverCoroutine(connection))
@@ -262,16 +257,14 @@ class asyncSimpleTcp:
     #---------------------------------------------------------------------
     async def receiverCoroutine(self, connection):
         reader, writer = connection
-        print('DEBUG receiverCoroutine')
         while True:
             if self.isConnected():
-                print('DEBUG receiverCoroutine, isConnected')
                 try:
                     data = await reader.read(BUFFER_SIZE)
                 except:
                     data = b''
                 if len(data) == 0:
-                    print('Disconnected')
+                    logging.debug('Disconnected')
                     self.connections.remove(connection)
                     if self.side == 'client' and len(self.connections) == 0:
                         self.running = False
@@ -296,7 +289,6 @@ class asyncSimpleTcp:
         return self.running
     #---------------------------------------------------------------------
     async def serverCoroutine(self):
-        print(f'DEBUG - its a server')
         try:
             self.server = await asyncio.start_server(self.clientConnectedCallback, self.address, self.port)
         except Exception as e:
@@ -310,12 +302,10 @@ class asyncSimpleTcp:
                                                 errorMsg   = e)) 
             return
            
-        print(f'DEBUG - self.server = {self.server}')
         addrs = ', '.join(str(sock.getsockname()) for sock in self.server.sockets)
-        print(f'Serving on {addrs}')
+        logging.info(f'Serving on {addrs}')
     #---------------------------------------------------------------------
     async def clientCoroutine(self):
-        print(f'DEBUG - its a client')
         try:
             connection = await asyncio.open_connection(self.address, self.port)
         except Exception as e:
@@ -327,9 +317,8 @@ class asyncSimpleTcp:
                                                 connection = None,
                                                 errorMsg   = e)) 
             return
-        print(f'DEBUG 20220830134109 - connection = {connection}')
         self.connections.append(connection)
-        print("Client_connected")
+        logging.debug("Client connected")
         self.receiverTask  = asyncio.create_task(self.receiverCoroutine(connection))
         await self.callback(SimpleNamespace(eventType  = eventTypes.CONNECTED,
                                             astObj     = self,
@@ -356,7 +345,6 @@ class asyncSimpleTcp:
         self.running = False
     #---------------------------------------------------------------------
     async def sendCoro(self, data, connection):
-        print(f'DEBUG - sendCoro({data}, {connection})')
         reader, writer = connection
         writer.write(data)
         await writer.drain()
@@ -391,7 +379,6 @@ class asyncObjOverTcp(asyncSimpleTcp):
         self.decoder      = streamDecoder()
     #---------------------------------------------------------------------
     async def innerCallback(self, event):
-        print('DEBUG - innerCallback')
         event.ootObj = self
         if event.eventType == eventTypes.DATA_RECEIVED:
             self.decoder.insertBytes(event.data)
