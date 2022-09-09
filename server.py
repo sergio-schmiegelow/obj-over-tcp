@@ -13,4 +13,7 @@ while True:
             print(f'Object {event.object} was received and echoed')
         elif event.eventType == oot.eventTypes.DISCONNECTED:
             print(f'Client disconnected')
+        elif event.eventType == oot.eventTypes.ERROR:
+            print(f'ERROR: {event.errorMsg}')
+            quit()
     time.sleep(0.1)
