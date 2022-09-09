@@ -1,8 +1,5 @@
-import logging
 import obj_over_tcp as oot
 import time
-
-logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s')
 
 myObject = {'echo test object': 'message string'}
 
@@ -11,11 +8,11 @@ while True:
     event = myCnx.poll()
     if event is not None:
         if event.eventType == oot.eventTypes.CONNECTED:
-            logging.info('Connected')
+            print('Connected')
             myCnx.send(myObject)
-            logging.info(f'Object {myObject} was sent')
-        if event.eventType == oot.eventTypes.OBJECT_RECEIVED:
-            logging.info(f'Object received: {event.object}') 
+            print(f'Object {myObject} was sent')
+        elif event.eventType == oot.eventTypes.OBJECT_RECEIVED:
+            print(f'Object received: {event.object}') 
             myCnx.close()
             break
     time.sleep(0.1)
