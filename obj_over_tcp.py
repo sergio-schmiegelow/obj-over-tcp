@@ -166,9 +166,10 @@ class simpleTcp:
         if 'side' in self.__dict__.keys():
             if self.side == 'server':
                 self.listener.close()
-        for connection in self.connections:
-            conn, address = connection
-            conn.close()
+        if 'connections' in self.__dict__.keys():
+            for connection in self.connections:
+                conn, address = connection
+                conn.close()
     #---------------------------------------------------------------------
     def send(self, data, connection = None):
         if len(self.connections) == 0:
