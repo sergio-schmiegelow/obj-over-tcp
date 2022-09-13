@@ -65,7 +65,7 @@ async def main():
 
 asyncio.run(main())
 ```
-## Echo client example in asynchronous mode
+## Echo server example in asynchronous mode
 ```python
 import asyncio
 import obj_over_tcp as oot
@@ -74,10 +74,12 @@ async def callback(event):
     if event.eventType == oot.eventTypes.OBJECT_RECEIVED:
         print(f'Object received:{event.object}')
         await event.ootObj.send(event.object)
-
+    elif event.eventType == oot.eventTypes.ERROR:
+        print(f'ERROR: {event.errorMsg}')
+        
 async def main():
     myOOT = oot.asyncObjOverTcp('server', '0.0.0.0', 10000, callback)
-    while True:
+    while myOOT.isRunning():
         #Other loop code here
         await asyncio.sleep(0.1)
 
@@ -103,3 +105,77 @@ The event object is a namespace with the following fields:
     * In client mode, requested connection.
     * In server mode, one of the connections.
 * **errorMsg**: (Only if eventType == eventTypes.ERROR) The error message.
+
+## Classes
+
+---
+
+### **class objOverTcp(side, address, port)**
+* **side**: 'client' or 'server'
+* **address**:
+  * In client mode: remote IP or host name
+  * In server mode: address of the interface to listen for connnections (Use '0.0.0.0' for all interfaces)
+* **port** TCP port to connect(client mode) or to listen for connections(server mode)
+####  Methods
+* **poll()**: Must be called periodically to:
+  * Establish new connections (server mode)
+  * Receive objects
+  * **returns**: An event object
+* **send(obj, connection = None)**: Send a Python object
+  * **Obj**: object to send
+  * **connection**: 
+    * In client mode: Not used
+    * In server mode: The connection to be used to send the object
+* **close(connection = None)**: Close a connection
+  * **connection**: 
+    * In client mode: Not used
+    * In server mode: The connection to close. If None, all connections and the server will be closed
+
+---
+
+### **class asyncObjOverTcp(side, address, port, callback, callbackEvents = DEFAULT_EVENTS, userData = None)**
+* **side**: 'client' or 'server'
+* **address**:
+  * In client mode: remote IP or host name
+  * In server mode: address of the interface to listen for connnections (Use '0.0.0.0' for all interfaces)
+* **port** TCP port to connect(client mode) or to listen for connections(server mode)
+* **(async)callback**: function on template *async def f(event)*. It is called on:
+  * New connections
+  * Disconnections
+  * New object received
+  * Data sent
+  * Errors
+* **callbackEvents** Event types to generate the callback function call. It is an "OR" combination of:
+  * **eventTypes.ERROR**
+  * **eventTypes.CONNECTED**
+  * **eventTypes.DISCONNECTED**
+  * **eventTypes.OBJECT_RECEIVED**
+  * **eventTypes.DATA_SENT**
+  * (the default is all of them)
+* **userData**: A Python object to be returned on the event on the callback .Usefull when there is more than one asyncObjOverTcp pointing to the same callback function.
+####  Methods
+* **(async)send(obj, connection = None, blocking = False)**: Send a Python object
+  * **Obj**: object to send
+  * **connection**: 
+    * In client mode: Not used
+    * In server mode: The connection to be used to send the object
+  * **Blocking** if True, will wait the object to be sent. If false, will call the callback function when the object is sent.
+* **(async)close(connection = None)**: Close a connection
+  * **connection**: 
+    * In client mode: Not used
+    * In server mode: The connection to close. If None, all connections and the server will be closed
+
+---
+
+## Stream transport classes
+
+---
+
+### **class simpleTcp(side, address, port)**
+### **class asyncSimpleTcp(side, address, port, callback, callbackEvents = DEFAULT_EVENTS, userData = None)**
+* The **simpleTcp** and **asyncSimpleTcp** are similar respectively to  **objOverTcp** and **asyncObjOverTcp**. The differences are:
+  * Stream based:
+    * Send and receive bytes objects
+    * The fragmentation of the sending may be different of the reception
+  * Instead of **eventTypes.OBJECT_RECEIVED** the receiving event is **eventTypes.DATA_RECEIVED**
+  * Instead fo **object** field, the data will come on the **data** field of the event object.
