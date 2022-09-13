@@ -1,9 +1,9 @@
 # obj-over-tcp
 Library to transport Python Objects over a TCP/IP connection
 
-There are two operation modes: Synchronous and asyncronous.
+There are two operation modes: Synchronous and asyncronous
 
-In synchronous mode a objOverTcp (client ou server) object must me created and its poll method must be called periodically. The return of pool is an event or None.
+In synchronous mode a objOverTcp (client ou server) object must be created and its poll method must be called periodically. The return of pool is an event or None
 ## Echo client example in synchronous mode
 ```python
 import obj_over_tcp as oot
@@ -44,7 +44,7 @@ while True:
             print(f'Client disconnected')
     time.sleep(0.1)
 ```
-In asynchronous mode, a callback async funcion must be defined to receive the events. A asyncObjOverTcp (client ou server) object must me created and the asyncio event loop must be run.
+In asynchronous mode, a callback async function must be defined to receive the events. A asyncObjOverTcp (client ou server) object must be created and the asyncio event loop must be run
 ## Echo client example in asynchronous mode
 ```python
 import asyncio
@@ -91,20 +91,20 @@ The event object is a namespace with the following fields:
 * **eventType**:
   * **eventTypes.ERROR**: Means some error occurred. The error message is on the errorMsg field
   * **eventTypes.CONNECTED**:
-    * In client mode, means the requested connection is connected.
-    * In server mode, means there is a new connection.
+    * In client mode, means the requested connection is connected
+    * In server mode, means there is a new connection
   * **eventTypes.DISCONNECTED**:
-    * In client mode, means the requested connection is disconnected.
-    * In server mode, means one of the connections is disconnected.
+    * In client mode, means the requested connection is disconnected
+    * In server mode, means one of the connections is disconnected
   * **eventTypes.OBJECT_RECEIVED**: Means an object is received. The object is on the object field
   * **eventTypes.DATA_SENT**: Means the data on the send command is sent
-* **ootObj**: (Only in asynchronous mode) The asyncObjOverTcp object associated to the event. Usefull when there is more than one client ou server using the same callback function.
-* **object**: (Only if eventType == eventTypes.OBJECT_RECEIVED) The received object .
+* **ootObj**: (Only in asynchronous mode) The asyncObjOverTcp object associated to the event. Usefull when there is more than one client ou server using the same callback function
+* **object**: (Only if eventType == eventTypes.OBJECT_RECEIVED) The received object
 * **userData**: The contents of the userData parameter on the creation of the asyncObjOverTcp object;
 * **connection**:
-    * In client mode, requested connection.
-    * In server mode, one of the connections.
-* **errorMsg**: (Only if eventType == eventTypes.ERROR) The error message.
+    * In client mode, requested connection
+    * In server mode, one of the connections
+* **errorMsg**: (Only if eventType == eventTypes.ERROR) The error message
 
 ## Classes
 
@@ -152,19 +152,26 @@ The event object is a namespace with the following fields:
   * **eventTypes.OBJECT_RECEIVED**
   * **eventTypes.DATA_SENT**
   * (the default is all of them)
-* **userData**: A Python object to be returned on the event on the callback .Usefull when there is more than one asyncObjOverTcp pointing to the same callback function.
+* **userData**: A Python object to be returned on the event on the callback .Usefull when there is more than one asyncObjOverTcp pointing to the same callback function
 ####  Methods
 * **(async)send(obj, connection = None, blocking = False)**: Send a Python object
   * **Obj**: object to send
   * **connection**: 
     * In client mode: Not used
     * In server mode: The connection to be used to send the object
-  * **Blocking** if True, will wait the object to be sent. If false, will call the callback function when the object is sent.
+  * **Blocking** if True, will wait the object to be sent. If false, will call the callback function when the object is sent
 * **(async)close(connection = None)**: Close a connection
   * **connection**: 
     * In client mode: Not used
     * In server mode: The connection to close. If None, all connections and the server will be closed
-
+* **isConnected(self)**
+  * Returns True if there is at least one connected connection
+* **getConnections()**
+  * Return a list of all connected connections
+* **isRunning()**
+  * In client mode: Returns True if it is connected or trying to connect
+  * In server mode: Returns True if the there is connected connectins or the server is listening for new connections
+  
 ---
 
 ## Stream transport classes
@@ -178,4 +185,4 @@ The event object is a namespace with the following fields:
     * Send and receive bytes objects
     * The fragmentation of the sending may be different of the reception
   * Instead of **eventTypes.OBJECT_RECEIVED** the receiving event is **eventTypes.DATA_RECEIVED**
-  * Instead fo **object** field, the data will come on the **data** field of the event object.
+  * Instead fo **object** field, the data will come on the **data** field of the event object

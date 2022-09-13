@@ -7,6 +7,7 @@ async def callback(event):
         await event.ootObj.send(event.object)
     elif event.eventType == oot.eventTypes.ERROR:
         print(f'ERROR: {event.errorMsg}')
+        
 async def main():
     myOOT = oot.asyncObjOverTcp('server', '0.0.0.0', 10000, callback)
     while myOOT.isRunning():
