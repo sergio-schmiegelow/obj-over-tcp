@@ -181,8 +181,9 @@ class simpleTcp:
                 return
             if self.side == 'client':
                 connection = self.connections[0]
-        conn, addr = connection  
-        conn.sendall(data)
+        conn, addr = connection
+        #TODO - Pendind send
+        res = conn.sendall(data)
         logging.debug(f'{self.side}, sent {data}')
    
 #-------------------------------------------------------------------------
@@ -195,19 +196,23 @@ class objOverTcp(simpleTcp):
     def poll(self):
         if len(self.eventsList) > 0:
             return(self.eventsList.pop(0))
-        event = super().poll()
-        if event is None:
-            return None
-        if event.eventType == eventTypes.DATA_RECEIVED:
-            self.decoder.insertBytes(event.data)
-            while self.decoder.thereIsObject():
-                self.eventsList.append(SimpleNamespace(eventType  = eventTypes.OBJECT_RECEIVED,
-                                                       object     = self.decoder.getObject(),
-                                                       connection = event.connection,
-                                                       errorMsg   = None))
-        else:
-            event.object = None
-            self.eventsList.append(event)
+        pollAgain = True #to consume all pending data
+        while pollAgain: 
+            event = super().poll()
+            pollAgain = False
+            if event is None:
+                return None
+            if event.eventType == eventTypes.DATA_RECEIVED:
+                pollAgain = True
+                self.decoder.insertBytes(event.data)
+                while self.decoder.thereIsObject():
+                    self.eventsList.append(SimpleNamespace(eventType  = eventTypes.OBJECT_RECEIVED,
+                                                           object     = self.decoder.getObject(),
+                                                           connection = event.connection,
+                                                           errorMsg   = None))
+            else:
+                event.object = None
+                self.eventsList.append(event)
         if len(self.eventsList) > 0:
             return(self.eventsList.pop(0))
         return None
