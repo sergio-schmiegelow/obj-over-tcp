@@ -9,8 +9,10 @@ def test_client_server():
     serverResponse = None
     
     while True:
+        moreToDo = False
         event = myServer.poll()
         if event is not None:
+            moreToDo = True
             if event.eventType == oot.eventTypes.CONNECTED:
                 logging.info(f'(server) Client connected')
             if event.eventType == oot.eventTypes.OBJECT_RECEIVED:
@@ -20,6 +22,7 @@ def test_client_server():
                 logging.info(f'(server) Client disconnected')
         event = myCnx.poll()
         if event is not None:
+            moreToDo = True
             if event.eventType == oot.eventTypes.CONNECTED:
                 logging.info('(client) Connected')
                 myCnx.send('request')
@@ -28,8 +31,9 @@ def test_client_server():
                 logging.info(f'Object received: {event.object}') 
                 serverResponse = event.object
                 myCnx.close()
-                break        
-        time.sleep(0.1)
+                break     
+        if not moreToDo:
+            time.sleep(0.1)
     myServer.close()
     assert serverResponse == 'response'
 #-------------------------------------------------------------------------    
@@ -39,8 +43,10 @@ def test_echo_big_transfer():
     serverResponse = None
     bigObject = list(range(1000000))
     while True:
+        moreToDo = False
         event = myServer.poll()
         if event is not None:
+            moreToDo = True
             if event.eventType == oot.eventTypes.CONNECTED:
                 logging.info(f'(server) Client connected')
             if event.eventType == oot.eventTypes.OBJECT_RECEIVED:
@@ -50,18 +56,21 @@ def test_echo_big_transfer():
                 logging.info(f'(server) Client disconnected')
         event = myCnx.poll()
         if event is not None:
+            moreToDo = True
             if event.eventType == oot.eventTypes.CONNECTED:
                 logging.info('(client) Connected')
                 myCnx.send(bigObject)
-                logging.info(f'(client)Object request was sent')
+                logging.info(f'(client)Object was sent')
             if event.eventType == oot.eventTypes.OBJECT_RECEIVED:
-                logging.info(f'(client)Object with len = {sys.getsizeof(event.object)}') 
+                logging.info(f'(client)Object with len = {sys.getsizeof(event.object)} was received') 
                 serverResponse = event.object
                 myCnx.close()
-                break        
-        time.sleep(0.1)
+                break
+        if not moreToDo:            
+            time.sleep(0.1)
     myServer.close()
     assert serverResponse == bigObject
+#-------------------------------------------------------------------------
 if __name__ == '__main__':
     test_client_server()
-    #test_echo_big_transfer()
+    test_echo_big_transfer()
