@@ -153,6 +153,12 @@ class simpleTcp:
             self.connections.remove(connection)
         return eventToReturn
     #---------------------------------------------------------------------
+    def isConnected(self):
+        return len(self.connections) > 0
+    #---------------------------------------------------------------------
+    def getConnections(self):
+        return self.connections
+    #---------------------------------------------------------------------
     def close(self, connection = None):
         if connection is None:
             self.__del__()
@@ -289,7 +295,7 @@ class asyncSimpleTcp:
                                                     errorMsg   = None)) 
     #---------------------------------------------------------------------
     def getConnections(self):
-        return self.connections()
+        return self.connections
     #---------------------------------------------------------------------
     def isRunning(self):
         return self.running

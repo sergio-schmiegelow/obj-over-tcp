@@ -1,1 +1,2 @@
 - Tratar as exceções (try/except) em modo assincrono
+- Tratar o envio de objetos grandes em modo síncrono (precisa enviar em partes, em vários "pools")

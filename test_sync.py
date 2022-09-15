@@ -63,5 +63,5 @@ def test_echo_big_transfer():
     myServer.close()
     assert serverResponse == bigObject
 if __name__ == '__main__':
-    #test_client_server()
-    test_echo_big_transfer()
+    test_client_server()
+    #test_echo_big_transfer()
