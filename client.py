@@ -15,5 +15,6 @@ while True:
             print(f'Object received: {event.object}') 
             myCnx.close()
             break
-    time.sleep(0.1)
+    else:
+        time.sleep(0.1)
 

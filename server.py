@@ -16,4 +16,5 @@ while True:
         elif event.eventType == oot.eventTypes.ERROR:
             print(f'ERROR: {event.errorMsg}')
             quit()
-    time.sleep(0.1)
+    else:
+        time.sleep(0.1)

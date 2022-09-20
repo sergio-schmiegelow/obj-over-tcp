@@ -23,7 +23,8 @@ while True:
             print(f'Object received: {event.object}') 
             myCnx.close()
             break
-    time.sleep(0.1)
+    else:
+        time.sleep(0.1)
 ```
 ## Echo server example in synchronous mode
 ```python
@@ -42,7 +43,11 @@ while True:
             print(f'Object {event.object} was received and echoed')
         elif event.eventType == oot.eventTypes.DISCONNECTED:
             print(f'Client disconnected')
-    time.sleep(0.1)
+        elif event.eventType == oot.eventTypes.ERROR:
+            print(f'ERROR: {event.errorMsg}')
+            quit()
+    else:
+        time.sleep(0.1)
 ```
 In asynchronous mode, a callback async function must be defined to receive the events. A asyncObjOverTcp (client ou server) object must be created and the asyncio event loop must be run
 ## Echo client example in asynchronous mode
@@ -97,7 +102,8 @@ The event object is a namespace with the following fields:
     * In client mode, means the requested connection is disconnected
     * In server mode, means one of the connections is disconnected
   * **eventTypes.OBJECT_RECEIVED**: Means an object is received. The object is on the object field
-  * **eventTypes.DATA_SENT**: Means the data on the send command is sent
+  * **eventTypes.DATA_SENT**: Means the transmission buffer is empty (all objects were sent)
+  * **eventTypes.MORE_TO_DO**: (Only in synchronous mode) Means there is more to process on the sockets. It's recommended recall the poll function with no delay.
 * **ootObj**: (Only in asynchronous mode) The asyncObjOverTcp object associated to the event. Usefull when there is more than one client ou server using the same callback function
 * **object**: (Only if eventType == eventTypes.OBJECT_RECEIVED) The received object
 * **userData**: The contents of the userData parameter on the creation of the asyncObjOverTcp object;

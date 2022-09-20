@@ -169,6 +169,11 @@ class simpleTcp:
                 self.connections[connection]['txBuffer'] = txBuffer
                 if len(txBuffer) > 0:
                     moreToDo = True
+                else:
+                    self.pendingEvents.append(SimpleNamespace(eventType  = eventTypes.DATA_SENT,
+                                                              data     = None,
+                                                              connection = connection,
+                                                              errorMsg   = None)) 
         logging.debug(f'{self.side} Checking for errors')            
         for sock in errorables:
             logging.debug(f'{self.side} There is exception on socket {sock}')
