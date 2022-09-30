@@ -222,7 +222,7 @@ class simpleTcp:
                 conn.close()
         self.connections = {}    
     #---------------------------------------------------------------------
-    def send(self, data, connection = None):
+    def send(self, data, connection = None, blocking = False):
         if len(self.connections) == 0:
             logging.error('Not connected')
             return
@@ -234,7 +234,13 @@ class simpleTcp:
                 connection = list(self.connections.keys())[0]
         self.connections[connection]['txBuffer'] += data
         logging.debug(f'{self.side}, {len(data)} bytes appended to txBuffer')
-   
+        if blocking:
+            txBuffer = self.connections[connection]['txBuffer']
+            while len(txBuffer) > 0:
+                sock = connection[0]
+                bytesSent = sock.send(txBuffer)
+                txBuffer = txBuffer[bytesSent:]
+                self.connections[connection]['txBuffer'] = txBuffer
 #-------------------------------------------------------------------------
 class objOverTcp(simpleTcp):
     def __init__(self, side, address, port):
@@ -266,8 +272,8 @@ class objOverTcp(simpleTcp):
             return(self.eventsList.pop(0))
         return None
     #---------------------------------------------------------------------
-    def send(self, obj, connection = None):
-        super().send(encode(obj), connection)
+    def send(self, obj, connection = None, blocking = False):
+        super().send(encode(obj), connection, blocking = blocking)
 #-------------------------------------------------------------------------
 class asyncSimpleTcp:
     #---------------------------------------------------------------------
@@ -399,6 +405,7 @@ class asyncSimpleTcp:
             await writer.wait_closed()
         self.running = False
     #---------------------------------------------------------------------
+    #TODO create a tx buffer based send
     async def sendCoro(self, data, connection):
         reader, writer = connection
         writer.write(data)
@@ -410,7 +417,7 @@ class asyncSimpleTcp:
                                             connection = connection,
                                             errorMsg   = None)) 
     #---------------------------------------------------------------------
-    async def send(self, data, connection = None, blocking = False):
+    async def send(self, data, connection = None):
         if connection is None:
             if len(self.connections) == 0:
                 logging.warning('Not connected')
@@ -419,12 +426,10 @@ class asyncSimpleTcp:
                 innerConnection = self.connections[0]
         else:
             innerConnection = connection
-        if blocking:
-            reader, writer = connection
-            writer.write(data)
-            await writer.drain()
-        else:
-            asyncio.create_task(self.sendCoro(data, innerConnection))
+        reader, writer = connection
+        writer.write(data)
+        await writer.drain()
+        #TODO a create tx buffer based send
 #-------------------------------------------------------------------------
 class asyncObjOverTcp(asyncSimpleTcp):
     #---------------------------------------------------------------------
